@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>LULU DETECTOR</title>
+    <style>
+        video,
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            transform: scaleX(-1);
+        }
+        
+        #result {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(255, 255, 255, 0.8);
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 24px;
+            font-family: Arial, sans-serif;
+            color: green;
+            z-index: 10;
+        }
+    </style>
+</head>
+
+<body>
+    <video id="video" autoplay playsinline width="640" height="480"></video>
+    <canvas id="canvas" width="640" height="480"></canvas>
+    <div id="result">Detecting...</div>
+
+    <audio id="alertSound" loop>
+  <source src="Downloads/myinstants.mp3" type="audio/mpeg" />
+  Your browser does not support the audio element.
+</audio>
+
+
+    <!-- MediaPipe Hands -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const result = document.getElementById('result');
+        const alertSound = document.getElementById('alertSound');
+
+        function distance(a, b) {
+            return Math.hypot(a.x - b.x, a.y - b.y);
+        }
+
+        function isOKSign(landmarks) {
+            const thumbTip = landmarks[4];
+            const indexTip = landmarks[8];
+            const middleTip = landmarks[12];
+
+            const dThumbIndex = distance(thumbTip, indexTip);
+            const dIndexMiddle = distance(indexTip, middleTip);
+
+            return dThumbIndex < 0.05 && dIndexMiddle > 0.05;
+        }
+
+        // For tracking vertical movement
+        const posHistory = [];
+        const maxHistory = 40; // Increased history length for slower movement
+        const movementThreshold = 0.005; // Lower threshold for sensitivity
+        let movementDetected = false;
+
+        function smoothPositions(history) {
+            const smoothed = [];
+            const windowSize = 3;
+            for (let i = 0; i < history.length; i++) {
+                let start = Math.max(0, i - windowSize + 1);
+                let sum = 0;
+                for (let j = start; j <= i; j++) sum += history[j];
+                smoothed.push(sum / (i - start + 1));
+            }
+            return smoothed;
+        }
+
+        function detectUpDownMovement(history) {
+            if (history.length < maxHistory) return false;
+
+            const smoothHistory = smoothPositions(history);
+
+            let directionChanges = 0;
+            let lastDirection = 0; // 1=up, -1=down, 0=none
+
+            for (let i = 1; i < smoothHistory.length; i++) {
+                let diff = smoothHistory[i - 1] - smoothHistory[i]; // positive = moving up (y decreases)
+                let currentDirection = 0;
+                if (diff > movementThreshold) currentDirection = 1; // moving up
+                else if (diff < -movementThreshold) currentDirection = -1; // moving down
+
+                if (currentDirection !== 0 && currentDirection !== lastDirection && lastDirection !== 0) {
+                    directionChanges++;
+                }
+                lastDirection = currentDirection !== 0 ? currentDirection : lastDirection;
+            }
+
+            return directionChanges >= 3;
+        }
+
+        const hands = new Hands({
+            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+        });
+
+        hands.setOptions({
+            maxNumHands: 1,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.7,
+            minTrackingConfidence: 0.7
+        });
+
+        hands.onResults((results) => {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                for (const landmarks of results.multiHandLandmarks) {
+                    drawConnectors(ctx, landmarks, HAND_CONNECTIONS, {
+                        color: '#00FF00',
+                        lineWidth: 3
+                    });
+                    drawLandmarks(ctx, landmarks, {
+                        color: '#FF0000',
+                        lineWidth: 1
+                    });
+
+                    // Track wrist vertical position (landmark 0)
+                    const wristY = landmarks[0].y;
+                    posHistory.push(wristY);
+                    if (posHistory.length > maxHistory) posHistory.shift();
+
+                    if (detectUpDownMovement(posHistory)) {
+                        if (!movementDetected) {
+                            movementDetected = true;
+                            alertSound.play();
+                        }
+                        result.innerText = "Moving Up & Down! Sound ON";
+                    } else {
+                        if (movementDetected) {
+                            movementDetected = false;
+                            alertSound.pause();
+                            alertSound.currentTime = 0;
+                        }
+                        // Your original gesture detection fallback
+                        if (isOKSign(landmarks)) {
+                            result.innerText = "hala nag lulu na";
+                        } else {
+                            result.innerText = "✋ Other Gesture";
+                        }
+                    }
+                }
+            } else {
+                result.innerText = "No Hand Detected";
+                if (movementDetected) {
+                    movementDetected = false;
+                    alertSound.pause();
+                    alertSound.currentTime = 0;
+                }
+                posHistory.length = 0;
+            }
+        });
+
+        const camera = new Camera(video, {
+            onFrame: async() => {
+                await hands.send({
+                    image: video
+                });
+            },
+            width: 640,
+            height: 480
+        });
+        camera.start();
+    </script>
+</body>
+
+</html>
