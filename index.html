@@ -25,21 +25,35 @@
             color: green;
             z-index: 10;
         }
+        
+        #overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 640px;
+            height: 480px;
+            background: rgba(255, 0, 0, 0.3);
+            /* red and transparent */
+            display: none;
+            z-index: 5;
+        }
     </style>
 </head>
 
 <body>
     <video id="video" autoplay playsinline width="640" height="480"></video>
     <canvas id="canvas" width="640" height="480"></canvas>
+    <div id="overlay"></div>
     <div id="result">Detecting...</div>
 
     <audio id="alertSound" loop>
-  <source src="Downloads/myinstants.mp3" type="audio/mpeg" />
+  <source src="myinstants.mp3" type="audio/mpeg" />
+  <source src="myinstants.ogg" type="audio/ogg" />
+  <source src="myinstants.wav" type="audio/wav" />
   Your browser does not support the audio element.
 </audio>
 
 
-    <!-- MediaPipe Hands -->
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
@@ -50,61 +64,24 @@
         const ctx = canvas.getContext('2d');
         const result = document.getElementById('result');
         const alertSound = document.getElementById('alertSound');
+        const overlay = document.getElementById('overlay');
 
         function distance(a, b) {
             return Math.hypot(a.x - b.x, a.y - b.y);
         }
 
-        function isOKSign(landmarks) {
-            const thumbTip = landmarks[4];
-            const indexTip = landmarks[8];
-            const middleTip = landmarks[12];
+        function isLuluGesture(landmarks) {
+            const tips = [4, 8, 12, 16, 20];
+            let maxDist = 0;
 
-            const dThumbIndex = distance(thumbTip, indexTip);
-            const dIndexMiddle = distance(indexTip, middleTip);
-
-            return dThumbIndex < 0.05 && dIndexMiddle > 0.05;
-        }
-
-        // For tracking vertical movement
-        const posHistory = [];
-        const maxHistory = 40; // Increased history length for slower movement
-        const movementThreshold = 0.005; // Lower threshold for sensitivity
-        let movementDetected = false;
-
-        function smoothPositions(history) {
-            const smoothed = [];
-            const windowSize = 3;
-            for (let i = 0; i < history.length; i++) {
-                let start = Math.max(0, i - windowSize + 1);
-                let sum = 0;
-                for (let j = start; j <= i; j++) sum += history[j];
-                smoothed.push(sum / (i - start + 1));
-            }
-            return smoothed;
-        }
-
-        function detectUpDownMovement(history) {
-            if (history.length < maxHistory) return false;
-
-            const smoothHistory = smoothPositions(history);
-
-            let directionChanges = 0;
-            let lastDirection = 0; // 1=up, -1=down, 0=none
-
-            for (let i = 1; i < smoothHistory.length; i++) {
-                let diff = smoothHistory[i - 1] - smoothHistory[i]; // positive = moving up (y decreases)
-                let currentDirection = 0;
-                if (diff > movementThreshold) currentDirection = 1; // moving up
-                else if (diff < -movementThreshold) currentDirection = -1; // moving down
-
-                if (currentDirection !== 0 && currentDirection !== lastDirection && lastDirection !== 0) {
-                    directionChanges++;
+            for (let i = 0; i < tips.length; i++) {
+                for (let j = i + 1; j < tips.length; j++) {
+                    const dist = distance(landmarks[tips[i]], landmarks[tips[j]]);
+                    if (dist > maxDist) maxDist = dist;
                 }
-                lastDirection = currentDirection !== 0 ? currentDirection : lastDirection;
             }
 
-            return directionChanges >= 3;
+            return maxDist < 0.1; // adjust threshold if needed
         }
 
         const hands = new Hands({
@@ -132,39 +109,26 @@
                         lineWidth: 1
                     });
 
-                    // Track wrist vertical position (landmark 0)
-                    const wristY = landmarks[0].y;
-                    posHistory.push(wristY);
-                    if (posHistory.length > maxHistory) posHistory.shift();
+                    if (isLuluGesture(landmarks)) {
+                        result.innerText = "📛 LULU DETECTED 📛";
 
-                    if (detectUpDownMovement(posHistory)) {
-                        if (!movementDetected) {
-                            movementDetected = true;
+                        if (alertSound.paused) {
                             alertSound.play();
                         }
-                        result.innerText = "Moving Up & Down! Sound ON";
+
+                        overlay.style.display = "block"; // Show red overlay
                     } else {
-                        if (movementDetected) {
-                            movementDetected = false;
-                            alertSound.pause();
-                            alertSound.currentTime = 0;
-                        }
-                        // Your original gesture detection fallback
-                        if (isOKSign(landmarks)) {
-                            result.innerText = "hala nag lulu na";
-                        } else {
-                            result.innerText = "✋ Other Gesture";
-                        }
+                        result.innerText = "✋ Normal Gesture";
+                        alertSound.pause();
+                        alertSound.currentTime = 0;
+                        overlay.style.display = "none";
                     }
                 }
             } else {
                 result.innerText = "No Hand Detected";
-                if (movementDetected) {
-                    movementDetected = false;
-                    alertSound.pause();
-                    alertSound.currentTime = 0;
-                }
-                posHistory.length = 0;
+                alertSound.pause();
+                alertSound.currentTime = 0;
+                overlay.style.display = "none";
             }
         });
 
@@ -177,6 +141,7 @@
             width: 640,
             height: 480
         });
+
         camera.start();
     </script>
 </body>
