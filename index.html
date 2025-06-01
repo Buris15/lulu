@@ -5,26 +5,49 @@
     <meta charset="UTF-8" />
     <title>LULU DETECTOR</title>
     <style>
+        /* Reset & base */
+        
+        * {
+            box-sizing: border-box;
+        }
+        
+        body {
+            margin: 0;
+            background: #121212;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #eee;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            user-select: none;
+        }
+        /* Container holding video & canvas */
+        
+        #container {
+            position: relative;
+            width: 640px;
+            height: 480px;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.9);
+            background: #222;
+        }
+        /* Mirror video & canvas */
+        
         video,
         canvas {
             position: absolute;
             top: 0;
             left: 0;
+            width: 640px;
+            height: 480px;
             transform: scaleX(-1);
+            border-radius: 16px;
+            object-fit: cover;
         }
-        
-        #result {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            background: rgba(255, 255, 255, 0.8);
-            padding: 10px;
-            border-radius: 8px;
-            font-size: 24px;
-            font-family: Arial, sans-serif;
-            color: green;
-            z-index: 10;
-        }
+        /* Overlay red translucent */
         
         #overlay {
             position: absolute;
@@ -32,20 +55,58 @@
             left: 0;
             width: 640px;
             height: 480px;
-            background: rgba(255, 0, 0, 0.3);
-            /* red and transparent */
+            background: rgba(255, 0, 0, 0.35);
+            border-radius: 16px;
             display: none;
-            z-index: 5;
+            pointer-events: none;
+            z-index: 2;
+            transition: opacity 0.3s ease;
+        }
+        /* Result box */
+        
+        #result {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.7);
+            padding: 14px 28px;
+            border-radius: 30px;
+            font-size: 28px;
+            font-weight: 700;
+            color: #00e676;
+            /* bright green */
+            text-shadow: 0 0 6px #00e676aa;
+            z-index: 10;
+            user-select: none;
+            white-space: nowrap;
+            letter-spacing: 1.2px;
+            box-shadow: 0 0 10px #00e676aa;
+            backdrop-filter: blur(10px);
+            transition: color 0.3s ease, box-shadow 0.3s ease;
+        }
+        /* Different color for normal gesture */
+        
+        #result.normal {
+            color: #03a9f4;
+            text-shadow: 0 0 6px #03a9f4aa;
+            box-shadow: 0 0 10px #03a9f4aa;
+        }
+        /* Audio controls hidden */
+        
+        audio {
+            display: none;
         }
     </style>
 </head>
 
 <body>
-    <video id="video" autoplay playsinline width="640" height="480"></video>
-    <canvas id="canvas" width="640" height="480"></canvas>
-    <div id="overlay"></div>
-    <div id="result">Detecting...</div>
-
+    <div id="container">
+        <video id="video" autoplay playsinline width="640" height="480"></video>
+        <canvas id="canvas" width="640" height="480"></canvas>
+        <div id="overlay"></div>
+        <div id="result">Detecting...</div>
+    </div>
     <audio id="alertSound" loop>
   <source src="myinstants.mp3" type="audio/mpeg" />
   <source src="myinstants.ogg" type="audio/ogg" />
